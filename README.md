@@ -1,14 +1,14 @@
 # Fincore
 
-> Motor de cálculo financeiro — projeto âncora para demonstrar maturidade de engenharia.
+> Financial calculation engine — anchor side project to demonstrate engineering maturity.
 
-Fincore é um sistema de cálculo financeiro construído em camadas ao longo de 5 meses.
-O domínio (finanças), as tecnologias (Go, gRPC, Kafka, Rust) e a arquitetura (eventos, observabilidade)
-são diretamente relevantes para engenharia de backend em fintechs.
+Fincore is a financial calculation system built in layers over 5 months.
+The domain (finance), the technologies (Go, gRPC, Kafka, Rust), and the architecture
+(event-driven, observability) are directly relevant to backend engineering at fintechs.
 
 ---
 
-## Organização do código
+## Code organization
 
 ```
 fincore/
@@ -18,151 +18,158 @@ fincore/
 │
 ├── cmd/
 │   └── fincore/
-│       └── main.go               # entry point — só monta as peças, sem lógica
+│       └── main.go               # entry point — wires pieces together, no business logic
 │
 ├── internal/
-│   ├── calc/                     # lógica financeira pura, sem dependências externas
+│   ├── calc/                     # pure financial logic, zero external dependencies
 │   │   ├── simple.go
+│   │   ├── simple_test.go
 │   │   ├── compound.go
+│   │   ├── compound_test.go
 │   │   ├── sac.go
+│   │   ├── sac_test.go
 │   │   ├── price.go
-│   │   └── calc_test.go
+│   │   └── price_test.go
 │   │
-│   ├── cli/                      # parsing de argumentos e formatação de saída (Mês 1)
+│   ├── cli/                      # argument parsing and output formatting (Month 1)
 │   │   └── commands.go
 │   │
-│   ├── server/                   # servidor gRPC (Mês 2)
+│   ├── server/                   # gRPC server (Month 2)
 │   │   └── server.go
 │   │
-│   ├── producer/                 # publicação de eventos Kafka (Mês 3)
+│   ├── producer/                 # Kafka event publishing (Month 3)
 │   │   └── producer.go
 │   │
-│   └── consumer/                 # consumo e persistência dos eventos (Mês 3)
+│   └── consumer/                 # event consumption and persistence (Month 3)
 │       └── consumer.go
 │
-├── proto/                        # definições Protobuf (Mês 2)
+├── proto/                        # Protobuf definitions (Month 2)
 │   └── fincore.proto
 │
-├── migrations/                   # SQL de criação de tabelas (Mês 3)
+├── migrations/                   # table creation SQL (Month 3)
 │   └── 001_create_calculations.sql
 │
-└── docker-compose.yml            # Kafka + Zookeeper + PostgreSQL (Mês 3)
+└── docker-compose.yml            # Kafka + Zookeeper + PostgreSQL (Month 3)
 ```
 
-### Princípio central
+### Core principles
 
-`internal/calc/` é o núcleo estável do sistema. Todas as camadas futuras
-(gRPC, Kafka, Rust FFI) importam este pacote — ele nunca é reescrito, apenas estendido.
+`internal/calc/` is the stable core of the system. All future layers
+(gRPC, Kafka, Rust FFI) import this package — it is never rewritten, only extended.
 
-`internal/` impede que qualquer código externo importe os pacotes do projeto.
-Isso é garantido pelo compilador Go — não é convenção, é regra da linguagem.
+Each `.go` file in `internal/calc/` has its own `_test.go` counterpart in the same directory.
+Test files use `package calc_test` (black-box testing) — they only access exported identifiers,
+just like any external consumer of the package would.
 
-`cmd/` contém apenas o `main.go`, que tem uma única responsabilidade:
-instanciar dependências e chamar `cli.Run()`. Sem lógica de negócio aqui.
+`internal/` prevents any external code from importing the project's packages.
+This is enforced by the Go compiler — it is not a convention, it is a language rule.
+
+`cmd/` contains only `main.go`, whose sole responsibility is to instantiate
+dependencies and call `cli.Run()`. No business logic here.
 
 ---
 
 ## Roadmap
 
-### Mês 1 — Go: CLI e fundações (Maio)
+### Month 1 — Go: CLI and foundations (May)
 
-**Objetivo:** aprender Go construindo a base do Fincore.
+**Goal:** learn Go in practice by building the Fincore base.
 
 - [ ] `go mod init github.com/dellatsantos/fincore`
-- [ ] Implementar funções de cálculo em `internal/calc/`:
-  - [ ] Juros simples: `M = C * (1 + i*t)`
-  - [ ] Juros compostos: `M = C * (1 + i)^t`
-  - [ ] Amortização SAC: amortização constante, prestação decrescente
-  - [ ] Amortização Price: prestação constante (tabela francesa)
-- [ ] Testes unitários com `testing` nativo desde o primeiro arquivo
-- [ ] CLI com subcomandos em `internal/cli/`:
+- [ ] Implement calculation functions in `internal/calc/`:
+  - [ ] Simple interest: `M = C * (1 + i*t)`
+  - [ ] Compound interest: `M = C * (1 + i)^t`
+  - [ ] SAC amortization: constant amortization, decreasing payments
+  - [ ] Price amortization: constant payments (French table)
+- [ ] Unit tests with the native `testing` package from the very first file
+- [ ] CLI with subcommands in `internal/cli/`:
   ```
   fincore compound --principal 10000 --rate 0.01 --periods 12
   fincore sac --principal 12000 --rate 0.01 --periods 12
   ```
-- [ ] Aprender: structs, interfaces, error handling (`errors.New`, `fmt.Errorf`), `go fmt`, `go vet`
+- [ ] Learn: structs, interfaces, idiomatic error handling (`errors.New`, `fmt.Errorf`), `go fmt`, `go vet`
 
-**Critério de conclusão:** `go test ./...` passa, CLI funciona para os 4 subcomandos.
+**Done when:** `go test ./...` passes, CLI works for all 4 subcommands.
 
 ---
 
-### Mês 2 — gRPC + Protobuf (Junho)
+### Month 2 — gRPC + Protobuf (June)
 
-**Objetivo:** expor os cálculos como API gRPC.
+**Goal:** expose the calculations as a gRPC API.
 
-- [ ] Definir schema em `proto/fincore.proto`:
+- [ ] Define schema in `proto/fincore.proto`:
   - [ ] `CalculateCompoundInterest(principal, rate, periods) → result`
   - [ ] `SimulateLoan(principal, rate, periods, type) → schedule []Installment`
   - [ ] `ProjectBalance(initial, monthly_rate, months) → []BalancePoint`
-- [ ] Gerar código Go com `protoc`
-- [ ] Implementar servidor gRPC em `internal/server/`
-- [ ] Cliente Python consumindo a API (`grpcio` + `protobuf`)
-- [ ] Testes de integração
-- [ ] Aprender: Protobuf schema design, streaming unário vs server-streaming, interceptors para logging
+- [ ] Generate Go code with `protoc`
+- [ ] Implement gRPC server in `internal/server/`
+- [ ] Python client consuming the API (`grpcio` + `protobuf`)
+- [ ] Integration tests
+- [ ] Learn: Protobuf schema design, unary vs server-streaming, gRPC interceptors for logging
 
-**Critério de conclusão:** cliente Python chama os 3 endpoints e recebe respostas corretas.
+**Done when:** Python client calls all 3 endpoints and receives correct responses.
 
 ---
 
-### Mês 3 — Kafka: pipeline de eventos (Julho)
+### Month 3 — Kafka: event pipeline (July)
 
-**Objetivo:** desacoplar o servidor com um broker de mensagens.
+**Goal:** decouple the server using a message broker.
 
-- [ ] Docker Compose com Kafka + Zookeeper + PostgreSQL
-- [ ] Cada chamada gRPC publica um evento no tópico correspondente:
+- [ ] Docker Compose with Kafka + Zookeeper + PostgreSQL
+- [ ] Each gRPC call publishes an event to the corresponding topic:
   - `loan.simulated`, `interest.calculated`, `balance.projected`
-- [ ] Consumer Go separado em `internal/consumer/`:
-  - [ ] Lê eventos e persiste no banco (`pgx` para PostgreSQL ou `modernc/sqlite`)
-  - [ ] Idempotência: o mesmo evento não é processado duas vezes
-- [ ] Aprender: producer/consumer em Go, partições, offsets, consumer groups, at-least-once delivery
+- [ ] Separate Go consumer in `internal/consumer/`:
+  - [ ] Reads events and persists to the database (`pgx` for PostgreSQL or `modernc/sqlite`)
+  - [ ] Idempotency: the same event must never be processed twice
+- [ ] Learn: producer/consumer in Go, partitions, offsets, consumer groups, at-least-once delivery
 
-**Critério de conclusão:** pipeline completo rodando via `docker-compose up`. Evento publicado pelo gRPC aparece persistido no banco.
+**Done when:** full pipeline running via `docker-compose up`. An event published by gRPC appears persisted in the database.
 
 ---
 
-### Mês 4 — Rust: reescrever o core (Agosto)
+### Month 4 — Rust: rewrite the core (August)
 
-**Objetivo:** reimplementar `internal/calc/` como crate Rust independente.
+**Goal:** reimplement `internal/calc/` as a standalone Rust crate.
 
 - [ ] `cargo new fincore-core --lib`
-- [ ] Reimplementar juros simples, compostos, SAC, Price em Rust
-- [ ] Foco em: ownership, borrowing, traits (`Display`, `From`), `Result`, `Option`
-- [ ] Escolher integração (decidir no momento):
-  - **Opção A:** compilar como `cdylib` e chamar do Go via FFI
-  - **Opção B:** expor via HTTP REST com Axum e comparar performance Go vs Rust
-- [ ] Aprender: `cargo`, `rustfmt`, `clippy`, error handling com `thiserror` ou `anyhow`
+- [ ] Reimplement simple interest, compound interest, SAC, Price in Rust
+- [ ] Focus on: ownership, borrowing, traits (`Display`, `From`), `Result`, `Option`
+- [ ] Choose integration (decide at the time):
+  - **Option A:** compile as `cdylib` and call from Go via FFI
+  - **Option B:** expose via HTTP REST with Axum and benchmark Go vs Rust on the same calculation
+- [ ] Learn: `cargo`, `rustfmt`, `clippy`, error handling with `thiserror` or `anyhow`
 
-**Critério de conclusão:** os mesmos cálculos do Mês 1 rodam via Rust, chamados pelo Go ou via HTTP.
-
----
-
-### Mês 5 — Observabilidade + portfólio (Setembro)
-
-**Objetivo:** tornar o projeto apresentável e observável.
-
-- [ ] Métricas Prometheus no servidor gRPC (latência, throughput, erros por endpoint)
-- [ ] Dashboard Grafana conectado ao Prometheus
-- [ ] Traces com OpenTelemetry (spans para cada cálculo e publicação Kafka)
-- [ ] Documentação final:
-  - [ ] README com arquitetura, como rodar e exemplos de uso
-  - [ ] Diagrama de arquitetura em Mermaid
-  - [ ] Post técnico no Medium/Dev.to sobre uma decisão de design
-
-**Critério de conclusão:** `docker-compose up` sobe tudo; Grafana mostra métricas reais; README permite que qualquer engenheiro rode o projeto em 5 minutos.
+**Done when:** the same calculations from Month 1 run via Rust, called from Go or via HTTP.
 
 ---
 
-## Como rodar (Mês 1)
+### Month 5 — Observability + portfolio (September)
+
+**Goal:** make the project presentable and observable.
+
+- [ ] Prometheus metrics on the gRPC server (latency, throughput, errors per endpoint)
+- [ ] Grafana dashboard connected to Prometheus
+- [ ] OpenTelemetry traces (spans for each calculation and Kafka publish)
+- [ ] Final documentation:
+  - [ ] README with architecture, how to run, and usage examples
+  - [ ] Architecture diagram in Mermaid
+  - [ ] Technical post on Medium/Dev.to about a design decision
+
+**Done when:** `docker-compose up` brings everything up; Grafana shows real metrics; README lets any engineer run the project in under 5 minutes.
+
+---
+
+## How to run (Month 1)
 
 ```bash
-# Clonar e entrar no projeto
+# Clone and enter the project
 git clone https://github.com/dellatsantos/fincore
 cd fincore
 
-# Rodar os testes
+# Run all tests
 go test ./...
 
-# Usar a CLI
+# Use the CLI
 go run ./cmd/fincore compound --principal 10000 --rate 0.01 --periods 12
 go run ./cmd/fincore sac --principal 12000 --rate 0.01 --periods 12
 go run ./cmd/fincore price --principal 12000 --rate 0.01 --periods 12
@@ -170,10 +177,10 @@ go run ./cmd/fincore price --principal 12000 --rate 0.01 --periods 12
 
 ---
 
-## Princípios do projeto
+## Project principles
 
-- **Testes desde o dia 1.** Sem testes, o código não existe.
-- **Commits pequenos e descritivos.** `git log` deve contar uma história.
-- **Nunca deixar código comentado.** Delete ou documente.
-- **README sempre atualizado** ao final de cada fase concluída.
-- **Deixe uma nota** no README ou num `TODO` ao final de cada sessão — nunca chegue na próxima sem saber de onde retomar.
+- **Tests from day one.** Without tests, the code does not exist.
+- **Small, descriptive commits.** `git log` should tell a story.
+- **Never leave commented-out code.** Delete it or document it.
+- **README always updated** at the end of each completed phase.
+- **Leave a note** in the README or a `TODO` comment at the end of each session — never come back without knowing where to resume.
